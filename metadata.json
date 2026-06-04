@@ -1,0 +1,6 @@
+{
+  "name": "Tactic Boss AI",
+  "description": "تطبيق خطط وتكتيكات ذكاء اصطناعي لألعاب PES و eFootball و FIFA و EA SPORTS FC",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
