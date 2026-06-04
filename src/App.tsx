@@ -3,13 +3,20 @@ import {
   Gamepad2, Sword, Library, Crown, Settings, ChevronLeft, ChevronRight,
   Plus, Save, Share2, Trash2, Shield, Zap, Target, UserPlus, Copy, Check,
   AlertTriangle, ArrowLeft, Info, HelpCircle, Download, Upload, RefreshCw,
-  Search, Users, Star, Flame, Award, Heart, Dribbble, Languages
+  Search, Users, Star, Flame, Award, Heart, Dribbble, Languages, Brain, Sparkles
 } from 'lucide-react';
 import { GameItem, GAMES_LIST, OPPONENT_STYLES, MY_STYLES, MATCH_STATES } from './utils/gameData';
 import { TacticResult, SavedTactic, Rival, UserSubscription, AppSettings } from './types';
 import { translations, countryFlags, SupportedLang } from './utils/lang';
+import { getSupabase } from './lib/supabaseClient';
+import AuthScreen from './components/AuthScreen';
+import TacticalBoard from './components/TacticalBoard';
 
 export default function App() {
+  // Auth state management
+  const [session, setSession] = useState<any>(null);
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
+
   // Localization: 'ar' | 'en' | 'es' | 'fr'
   const [lang, setLang] = useState<SupportedLang>(() => {
     const saved = localStorage.getItem('tb_lang');
@@ -137,7 +144,124 @@ export default function App() {
     } catch (e) {
       console.error('Error loading config:', e);
     }
+
+    const sb = getSupabase();
+    if (sb) {
+      sb.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        if (session) {
+          loadSupabaseData(session);
+        }
+      });
+
+      const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+        if (session) {
+          loadSupabaseData(session);
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
   }, []);
+
+  const loadSupabaseData = async (activeSession: any) => {
+    const sb = getSupabase();
+    if (!sb || !activeSession?.user) return;
+
+    try {
+      // 1. Fetch Profile
+      const { data: profile } = await sb
+        .from('users_profile')
+        .select('*')
+        .eq('user_id', activeSession.user.id)
+        .maybeSingle();
+
+      if (profile) {
+        if (profile.display_name) {
+          setCoachName(profile.display_name);
+          localStorage.setItem('tb_coach_name', profile.display_name);
+        }
+        if (profile.favorite_game) {
+          setFavGame(profile.favorite_game);
+          localStorage.setItem('tb_fav_game', profile.favorite_game);
+        }
+      }
+
+      // 2. Fetch Tactics
+      const { data: dbTactics } = await sb
+        .from('saved_tactics')
+        .select('*')
+        .eq('user_id', activeSession.user.id)
+        .order('created_at', { ascending: false });
+
+      if (dbTactics) {
+        const mapped: SavedTactic[] = dbTactics.map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          game: row.game,
+          myFormation: row.user_formation,
+          oppFormation: row.opponent_formation,
+          opponentStyle: row.opponent_style,
+          myStyle: row.user_style,
+          matchState: row.match_state,
+          myTeam: row.team,
+          oppTeam: row.opponent_team,
+          notes: row.notes || (row.input_data ? row.input_data.notes : ''),
+          result: row.result_data,
+          createdAt: new Date(row.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })
+        }));
+        setSavedTactics(mapped);
+        localStorage.setItem('saved_tactics', JSON.stringify(mapped));
+      }
+
+      // 3. Fetch Rivals
+      const { data: dbRivals } = await sb
+        .from('rivals')
+        .select('*')
+        .eq('user_id', activeSession.user.id)
+        .order('created_at', { ascending: false });
+
+      if (dbRivals) {
+        const mappedRivals: Rival[] = dbRivals.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          favoriteGame: row.favorite_game,
+          favoriteFormation: row.favorite_formation,
+          playstyle: row.playstyle,
+          strengths: row.strengths,
+          weaknesses: row.weaknesses,
+          notes: row.notes,
+          createdAt: new Date(row.created_at).toLocaleDateString('ar-EG')
+        }));
+        setRivals(mappedRivals);
+        localStorage.setItem('rivals', JSON.stringify(mappedRivals));
+      }
+
+      // 4. Fetch Subscriptions
+      const { data: dbSubs } = await sb
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', activeSession.user.id)
+        .maybeSingle();
+
+      if (dbSubs) {
+        const subObj: UserSubscription = {
+          plan: dbSubs.plan || 'free',
+          status: dbSubs.status || 'active',
+          startedAt: dbSubs.started_at,
+          expiresAt: dbSubs.expires_at || ''
+        };
+        setSubscription(subObj);
+        localStorage.setItem('subscription', JSON.stringify(subObj));
+      }
+    } catch (err) {
+      console.warn("Failed loading Supabase data:", err);
+    }
+  };
+
 
   // Update theme dynamically
   const changeTheme = (newTheme: string) => {
@@ -150,7 +274,7 @@ export default function App() {
   const changeLang = (newLang: SupportedLang) => {
     setLang(newLang);
     localStorage.setItem('tb_lang', newLang);
-    triggerToast(newLang === 'ar' ? `أهلاً بك بكابتن تكتيك بوس!` : `Welcome to Tactic Boss!`);
+    triggerToast(newLang === 'ar' ? `أهلاً بك بكابتن تكتيك بوس!` : `Welcome to Tactics Boss!`);
   };
 
   // Stepper validation & progression helper
@@ -299,15 +423,51 @@ export default function App() {
     };
 
     syncTactics([newSaved, ...savedTactics]);
+
+    // Save to Supabase Cloud if authenticated
+    const sb = getSupabase();
+    if (sb && session?.user) {
+      sb.from('saved_tactics').insert({
+        title: title,
+        game: selectedGame.name,
+        user_formation: formData.myFormation,
+        opponent_formation: formData.oppFormation,
+        user_style: formData.myStyle,
+        opponent_style: formData.opponentStyle,
+        match_state: formData.matchState,
+        team: formData.myTeam || 'فريقك',
+        opponent_team: formData.oppTeam || 'الخصم',
+        notes: formData.notes,
+        input_data: formData,
+        result_data: currentResult,
+        user_id: session.user.id
+      }).then(({ error }) => {
+        if (error) {
+          console.warn('Supabase DB insertion warning:', error);
+        } else {
+          loadSupabaseData(session);
+        }
+      });
+    }
+
     triggerToast(lang === 'ar' ? 'تم الحفظ في مكتبة تكتيكات BOSS AI!' : 'Saved successfully in BOSS AI vault!');
   };
 
   // Delete saved tactic
-  const handleDeleteTactic = (id: string, e: React.MouseEvent) => {
+  const handleDeleteTactic = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm(lang === 'ar' ? 'هل تود بالتأكيد حذف هذا التكتيك؟' : 'Are you sure you want to delete this tactic?')) {
       const updated = savedTactics.filter(t => t.id !== id);
       syncTactics(updated);
+
+      const sb = getSupabase();
+      if (sb && session) {
+        try {
+          await sb.from('saved_tactics').delete().eq('id', id);
+        } catch (err) {
+          console.warn("Supabase database deletion failed:", err);
+        }
+      }
       triggerToast(lang === 'ar' ? 'تم الحذف بنجاح' : 'Deleted successfully');
     }
   };
@@ -353,15 +513,45 @@ export default function App() {
     };
 
     syncRivals([newR, ...rivals]);
+
+    const sb = getSupabase();
+    if (sb && session?.user) {
+      sb.from('rivals').insert({
+        name: rivalForm.name || 'خصم لدود',
+        favorite_game: rivalForm.favoriteGame,
+        favorite_formation: rivalForm.favoriteFormation,
+        playstyle: rivalForm.playstyle,
+        strengths: rivalForm.strengths,
+        weaknesses: rivalForm.weaknesses,
+        notes: rivalForm.notes,
+        user_id: session.user.id
+      }).then(({ error }) => {
+        if (error) {
+          console.warn('Supabase DB rival insertion warning:', error);
+        } else {
+          loadSupabaseData(session);
+        }
+      });
+    }
+
     setIsAddingRival(false);
     triggerToast(lang === 'ar' ? 'تمت إضافة ملف الخصم بنجاح للرصد الدوري!' : 'Rival profile added successfully for scouting!');
   };
 
   // Delete Rival
-  const handleDeleteRival = (id: string) => {
+  const handleDeleteRival = async (id: string) => {
     if (confirm(lang === 'ar' ? 'حذف ملف هذا الخصم؟' : 'Delete this rival record?')) {
       const updated = rivals.filter(r => r.id !== id);
       syncRivals(updated);
+
+      const sb = getSupabase();
+      if (sb && session) {
+        try {
+          await sb.from('rivals').delete().eq('id', id);
+        } catch (err) {
+          console.warn("Supabase database rival deletion failed:", err);
+        }
+      }
       triggerToast(lang === 'ar' ? 'تم الحذف' : 'Scouting profile deleted');
     }
   };
@@ -451,7 +641,7 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
       setDiagLog([...logs]);
     };
 
-    setTimeout(() => pushLog("بدء تشخيص سلامة Tactic Boss AI..."), 300);
+    setTimeout(() => pushLog("بدء تشخيص سلامة Tactics Boss AI..."), 300);
     setTimeout(() => pushLog(`اللغة المعتمدة للواجهة: ${lang.toUpperCase()}`), 600);
     setTimeout(() => pushLog(`نوع الاستايل الفعال: ${theme.replace('theme-', '').toUpperCase()}`), 900);
     setTimeout(() => {
@@ -559,6 +749,20 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
     }
     return positions;
   };
+
+  if (!session) {
+    return (
+      <AuthScreen 
+        onAuthSuccess={(activeSession) => {
+          setSession(activeSession);
+          setIsOfflineMode(false);
+          localStorage.removeItem('tb_guest_mode');
+          loadSupabaseData(activeSession);
+        }}
+        lang={lang}
+      />
+    );
+  }
 
   return (
     <div className={`${theme} min-h-screen text-[var(--text-main)] transition-colors duration-300 relative overflow-x-hidden pb-32 font-sans`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -759,6 +963,40 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
 
               {/* Sub-Actions Gaming Grid (Bento Box style) */}
               <div className="grid grid-cols-2 gap-3">
+                {/* Free Sandbox Board */}
+                <button 
+                  onClick={() => {
+                    setCurrentResult({
+                      formation: '4-3-3',
+                      reason: lang === 'ar' ? 'اللوحة التكتيكية التجريبية الحرة - خطط كما تشاء' : 'Free Sandbox Tactical Board - Plan freely',
+                      defensiveStyle: 'متوازن',
+                      defensiveDetails: {},
+                      attackingStyle: 'متوازن',
+                      attackingDetails: {},
+                      playerInstructions: [],
+                      inGameStrategy: '',
+                      emergencyPlan: '',
+                      protectLeadPlan: '',
+                      mistakesToAvoid: [],
+                      confidence: '100%'
+                    });
+                    setScreen('sandbox-board');
+                  }}
+                  className="bg-white/5 hover:bg-white/10 border border-white/5 p-4 rounded-xl text-right flex flex-col justify-between h-28 hover:border-violet-500/20 active:scale-[0.98] transition-all col-span-2"
+                  id="sandbox-board-btn"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="p-1.5 rounded-lg bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 animate-pulse">
+                      <Target size={16} />
+                    </span>
+                    <span className="text-[9px] text-yellow-400 font-extrabold uppercase">SANDBOX BOARD</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-300">{lang === 'ar' ? 'اللوحة التكتيكية الحرة (سبورة الرسام التفاعلية) ⚽' : 'Free Tactics Sandbox Board ⚽'}</h4>
+                    <p className="text-[9px] text-slate-400 mt-0.5">{lang === 'ar' ? 'تحريك اللاعبين بحرية، تغيير الخطط، ورسم المسارات الخططية المبتكرة' : 'Freely scale positions, toggle forms and sketch tactical runs'}</p>
+                  </div>
+                </button>
+
                 {/* Rival Mode */}
                 <button 
                   onClick={() => setScreen('rivals')}
@@ -848,7 +1086,7 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
 
             {/* Footprint metadata list */}
             <div className="text-center py-2 text-[10px] text-slate-500 font-mono">
-              Designed & Engineered for PlayStation Gamers • Tactic Boss AI • v2.6.4
+              Designed & Engineered for PlayStation Gamers • Tactics Boss AI • v2.6.4
             </div>
           </div>
         )}
@@ -1227,41 +1465,18 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
               </div>
             </div>
 
-            {/* INTERACTIVE PITCH FORMATION VISUALIZER */}
+            {/* INTERACTIVE DRAGGABLE CHALKBOARD & DRAWING LAYER PITCH */}
             <div className="space-y-2">
               <h3 className="text-xs font-extrabold text-slate-400 flex items-center gap-1">
-                <Target size={14} className="text-emerald-400" />
-                <span>رسم التمركز التكتيكي على أرضية الملعب</span>
+                <Target size={14} className="text-emerald-400 animate-pulse" />
+                <span>{lang === 'ar' ? 'اللوحة التكتيكية التفاعلية (قابلة للسحب والرسم)' : 'Interactive Draggable & Sketching Pitch'}</span>
               </h3>
               
-              {/* Miniature Soccer Field Container */}
-              <div className="w-full h-80 rounded-2xl pitch-container relative overflow-hidden shadow-2xl transition">
-                {/* Grass Stripes lines overlay */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_50%,transparent_50%)] bg-[size:100%_40px] pointer-events-none" />
-                
-                {/* Center circle line marker */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 rounded-full border border-white/15 pointer-events-none" />
-                <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-white/15 pointer-events-none" />
-                
-                {/* Penalty goal areas markings */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-16 border-b border-x border-white/15 rounded-b-xl pointer-events-none" />
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 h-16 border-t border-x border-white/15 rounded-t-xl pointer-events-none" />
-                
-                {/* Position Nodes */}
-                {getCoordinatesForFormation(currentResult.formation).map((pos, idx) => (
-                  <div 
-                    key={idx}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 group scale-95"
-                    style={{ top: pos.top, left: pos.left }}
-                  >
-                    {/* Pulsing neon point */}
-                    <div className="absolute -inset-1 rounded-full bg-violet-500/30 blur-sm group-hover:bg-emerald-500/40 transition pointer-events-none animate-ping" />
-                    <div className="w-7 h-7 rounded-full bg-slate-900 border-2 border-violet-500 hover:border-emerald-400 transition-colors flex items-center justify-center shadow-lg font-mono text-[8px] font-black text-white relative z-10 cursor-default">
-                      {pos.role}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <TacticalBoard 
+                formation={currentResult.formation}
+                opponentFormation={formData.oppFormation}
+                lang={lang}
+              />
             </div>
 
             {/* Defensive instructions custom details grid */}
@@ -1625,6 +1840,134 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
 
 
         {/* ======================================================= */}
+        {/* FREE EXPERIMENTAL SANDBOX TACTICAL BOARD SCREEN */}
+        {/* ======================================================= */}
+        {screen === 'sandbox-board' && (
+          <div className="space-y-4 animate-fade-in pb-12">
+            <div className="bg-white/5 border border-white/5 p-4 rounded-2xl">
+              <h3 className="text-sm font-black text-white">{lang === 'ar' ? 'تجهيز اللوحة التكتيكية الحرة ⚙️' : 'Free Sandbox Setup ⚙️'}</h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === 'ar' ? 'اختر تشكيلة فريقك وتشكيلة الخصم لتوزيع اللاعبين يدوياً على المستطيل الأخضر.' : 'Configure your lineup to start graphing pathways on the pitch.'}</p>
+
+              <div className="grid grid-cols-2 gap-3 mt-4 text-right">
+                <div className="space-y-1 text-xs">
+                  <label className="block text-slate-400 font-bold">{lang === 'ar' ? 'تشكيلة فريقك' : 'Your Formation'}</label>
+                  <select
+                    value={formData.myFormation}
+                    onChange={(e) => setFormData({...formData, myFormation: e.target.value})}
+                    className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-white outline-none focus:border-violet-500"
+                  >
+                    {['4-3-3', '4-2-3-1', '4-4-2', '3-5-2', '4-2-4'].map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <label className="block text-slate-400 font-bold">{lang === 'ar' ? 'تشكيلة الخصم' : 'Opponent Formation'}</label>
+                  <select
+                    value={formData.oppFormation}
+                    onChange={(e) => setFormData({...formData, oppFormation: e.target.value})}
+                    className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-white outline-none focus:border-violet-500"
+                  >
+                    {['4-2-3-1', '4-3-3', '4-4-2', '3-5-2', '5-3-2'].map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xs font-extrabold text-slate-400 flex items-center gap-1">
+                <Target size={14} className="text-emerald-400 animate-pulse" />
+                <span>{lang === 'ar' ? 'اللوحة التكتيكية التفاعلية (قم بسحب اللاعبين وارسم خططك)' : 'Interactive Draggable Pitch (Drag and draw)'}</span>
+              </h3>
+              
+              <TacticalBoard 
+                formation={formData.myFormation}
+                opponentFormation={formData.oppFormation}
+                lang={lang}
+              />
+            </div>
+
+            {/* NEW AI Mastermind Feedback Integration Module */}
+            <div className="bg-slate-950/60 p-4 rounded-xl border border-white/5 space-y-3 mt-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-violet-600/10 text-violet-400 border border-violet-500/20">
+                  <Brain size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white">
+                    {lang === 'ar' ? 'تحليل العقل المدبر الاصطناعي للسبورة 🧠' : 'AI Strategic Sandbox Analyzer 🧠'}
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {lang === 'ar' 
+                      ? 'سيقوم الـ AI بقراءة وضعية اللاعبين ونوع التشكيلات الموزعة واقتراح خطة مضادة وتعليمات ميتّا حاسمة.' 
+                      : 'The AI will parse your current interactive chalkboard layout and design custom playstyle counters.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-right">
+                <div className="space-y-1 text-xs">
+                  <label className="block text-slate-400 font-bold">
+                    {lang === 'ar' ? 'اللعبة المستهدفة لتكييف الأرقام' : 'Target Videogame'}
+                  </label>
+                  <select
+                    value={selectedGame ? selectedGame.id : (GAMES_LIST[0]?.id || '')}
+                    onChange={(e) => {
+                      const gameObj = GAMES_LIST.find(g => g.id === e.target.value);
+                      if (gameObj) setSelectedGame(gameObj);
+                    }}
+                    className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-white outline-none focus:border-violet-500 text-xs"
+                  >
+                    {GAMES_LIST.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <label className="block text-slate-400 font-bold">
+                    {lang === 'ar' ? 'ملاحظات أو تركيز تكتيكي إضافي (اختياري)' : 'Additional Tactical Focus (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={lang === 'ar' ? 'مثال: دفاع مكثف، تيكس تاكا، لعب سريع من العمر...' : 'e.g. counter attack, tikitaka, park the bus...'}
+                    value={formData.notes}
+                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                    className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-white placeholder-slate-600 outline-none focus:border-violet-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const originalNotes = formData.notes;
+                  const customPromptNotes = `تم الإرسال من السبورة التكتيكية التفاعلية للألعاب. يرجى تحليل التشكيل المتوفر ${formData.myFormation} في مواجه ${formData.oppFormation} وطرح التكتيكات المناسبة والخطط المضادة بدقة. ${originalNotes ? 'ملاحظة إضافية من المستخدم: ' + originalNotes : ''}`;
+                  
+                  // Setup temporary sandbox analysis notes
+                  setFormData(prev => ({
+                    ...prev,
+                    notes: customPromptNotes
+                  }));
+
+                  // Trigger the standard AI generator flow sequence
+                  await handleGenerateTactic();
+                }}
+                className="w-full bg-violet-600 hover:bg-violet-500 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 active:scale-[0.99] transition shadow-lg mt-2 cursor-pointer"
+              >
+                <Sparkles size={14} className="animate-pulse" />
+                <span>{lang === 'ar' ? 'حلل السبورة واحصل على الخطة المضادة بالذكاء الاصطناعي ⚡' : 'Analyze Chalkboard & Generate AI Counter Tactic ⚡'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+
+        {/* ======================================================= */}
         {/* 7. PREMIUM PLAN BILLING MEMBERSHIP SCREEN */}
         {/* ======================================================= */}
         {screen === 'subs' && (
@@ -1763,9 +2106,12 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
               </div>
             </div>
 
-            {/* Profile fields customize */}
+            {/* Profile fields customize & Cloud Sync controls */}
             <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-3 text-xs">
-              <h3 className="text-xs font-extrabold text-violet-400">{t.userPrefsTitle}</h3>
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <h3 className="text-xs font-extrabold text-violet-400">{t.userPrefsTitle}</h3>
+                <span className="text-[9px] bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-full font-mono font-bold">✓ {lang === 'ar' ? 'متصل بالسحابة' : 'Cloud Synced'}</span>
+              </div>
               
               <div className="space-y-1">
                 <label className="block text-slate-400 font-bold">{t.usernameLabel}</label>
@@ -1775,8 +2121,12 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
                   onChange={(e) => {
                     setCoachName(e.target.value);
                     localStorage.setItem('tb_coach_name', e.target.value);
+                    const sb = getSupabase();
+                    if (sb && session?.user) {
+                      sb.from('users_profile').upsert({ id: session.user.id, display_name: e.target.value, favorite_game: favGame });
+                    }
                   }}
-                  className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2"
+                  className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-violet-600"
                 />
               </div>
 
@@ -1788,10 +2138,36 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
                   onChange={(e) => {
                     setFavGame(e.target.value);
                     localStorage.setItem('tb_fav_game', e.target.value);
+                    const sb = getSupabase();
+                    if (sb && session?.user) {
+                      sb.from('users_profile').upsert({ id: session.user.id, display_name: coachName, favorite_game: e.target.value });
+                    }
                   }}
-                  className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2"
+                  className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-violet-600"
                 />
               </div>
+
+              {session?.user && (
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <p className="text-[10px] text-slate-400">{lang === 'ar' ? `البريد الإلكتروني للذكاء: ${session.user.email}` : `Scouting Email: ${session.user.email}`}</p>
+                  <button
+                    onClick={() => {
+                      const sb = getSupabase();
+                      if (sb) {
+                        sb.auth.signOut().then(() => {
+                          setSession(null);
+                          setIsOfflineMode(false);
+                          localStorage.removeItem('tb_guest_mode');
+                          triggerToast(lang === 'ar' ? 'تم تسجيل خروجك بنجاح' : 'Successfully signed out');
+                        });
+                      }
+                    }}
+                    className="w-full bg-red-600/10 hover:bg-red-600/20 text-red-400 py-2 rounded-xl border border-red-500/20 font-bold transition text-xs"
+                  >
+                    {lang === 'ar' ? 'تسجيل الخروج الآمن' : 'Secure Sign Out'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* DIAGNOSTICS & SYSTEM INTEGRITY CHECKS */}
@@ -1880,7 +2256,7 @@ ${currentResult.playerInstructions.map(i => `• ${i}`).join('\n')}
             setStep(1);
             setScreen('select-game');
           }}
-          className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold h-full w-14 transition ${screen === 'generator' || screen === 'select-game' || screen === 'result' ? 'text-violet-400 scale-105' : 'text-slate-400 hover:text-white'}`}
+          className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold h-full w-14 transition ${screen === 'generator' || screen === 'select-game' || screen === 'result' || screen === 'sandbox-board' ? 'text-violet-400 scale-105' : 'text-slate-400 hover:text-white'}`}
           id="tab-generator"
         >
           <Zap size={18} />

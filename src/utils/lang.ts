@@ -94,7 +94,7 @@ export const countryFlags: Record<SupportedLang, { name: string; flag: string }>
 
 export const translations: Record<SupportedLang, TranslationDict> = {
   ar: {
-    appName: "Tactic Boss AI",
+    appName: "Tactics Boss AI",
     tagline: "خطتك تكسر الصخر قبل الماتش! سيب التكتيك علينا يا كوتش.",
     startBtn: "ابدأ خطة الفوز",
     rivalBtn: "اعمل خطة ضد خصمك",
@@ -158,7 +158,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     upgradeProBtn: "الترقية للـ Pro Boss",
     joinEliteBtn: "الانضمام للمدربين النخبة",
     activePlanBadge: "خطتك الفعالة حالياً",
-    settingsTitle: "إعدادات تكوين نظام Tactic Boss AI",
+    settingsTitle: "إعدادات تكوين نظام Tactics Boss AI",
     userPrefsTitle: "التفضيلات والبيانات الشخصية للمدرب",
     usernameLabel: "اسم المدرب أو الجيمر",
     favGameLabel: "إصدار لعبتك الأساسية الفتاكة",
@@ -178,7 +178,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     searchGamesPlaceholder: "ابحث عن اللعبة... (مثال: FC 26)",
   },
   en: {
-    appName: "Tactic Boss AI",
+    appName: "Tactics Boss AI",
     tagline: "Destroy your soccer rivals custom tactics before kick-off! Powered by gaming intelligence.",
     startBtn: "Start Winning Tactic",
     rivalBtn: "Counter specific Rival",
@@ -242,7 +242,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     upgradeProBtn: "Upgrade to Pro Boss",
     joinEliteBtn: "Join Elite Coaches",
     activePlanBadge: "Your Current Plan status",
-    settingsTitle: "Tactic Boss System Configuration",
+    settingsTitle: "Tactics Boss System Configuration",
     userPrefsTitle: "Gametech Manager Profile Settings",
     usernameLabel: "Coach / Gamer Tag",
     favGameLabel: "Favorite Primary Simulator Game",
@@ -262,7 +262,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     searchGamesPlaceholder: "Look up a game... (e.g., FC 26)",
   },
   es: {
-    appName: "Tactic Boss AI",
+    appName: "Tactics Boss AI",
     tagline: "¡Destruye las tácticas de tus rivales antes del silbatazo! Inteligencia para gamers.",
     startBtn: "Iniciar Táctica de Victoria",
     rivalBtn: "Contrarrestar Rival",
@@ -326,7 +326,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     upgradeProBtn: "Mejorar a Pro Boss",
     joinEliteBtn: "Unirse a Entrenadores Élite",
     activePlanBadge: "Estado de tu Plan Activo",
-    settingsTitle: "Configuración del Sistema Tactic Boss",
+    settingsTitle: "Configuración del Sistema Tactics Boss",
     userPrefsTitle: "Ajustes de Perfil de Entrenador",
     usernameLabel: "Nombre de Entrenador",
     favGameLabel: "Simulador Favorito Principal",
@@ -346,7 +346,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     searchGamesPlaceholder: "Buscar un juego... (ej., FC 26)",
   },
   fr: {
-    appName: "Tactic Boss AI",
+    appName: "Tactics Boss AI",
     tagline: "Détruisez les plans de vos rivaux avant le coup d'envoi ! Technologie IA de pointe.",
     startBtn: "Lancer la Tactique Gagnante",
     rivalBtn: "Contrer un Rival Spécifique",
@@ -410,7 +410,7 @@ export const translations: Record<SupportedLang, TranslationDict> = {
     upgradeProBtn: "Passer à l'offre Pro Boss",
     joinEliteBtn: "Rejoindre l'Élite des Entraîneurs",
     activePlanBadge: "Votre Statut d'Abonnement Actuel",
-    settingsTitle: "Configuration Système Tactic Boss IA",
+    settingsTitle: "Configuration Système Tactics Boss IA",
     userPrefsTitle: "Profil & Identifiant du Coach",
     usernameLabel: "Pseudo / Identifiant de Joueur",
     favGameLabel: "Votre Simulateur Spatial Préféré",

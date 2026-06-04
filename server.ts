@@ -164,7 +164,7 @@ app.post("/api/generate-tactic", async (req, res) => {
       : `FIFA/EA SPORTS FC Settings: Defensive Style, Defensive Width, Depth, Build Up Play, Chance Creation, Attacking Width, Players in Box, Corners, Free Kicks, Player Instructions, Work Rates, Ultimate Team suitability.`;
 
     const promptText = `
-You are an expert full-stack tactical engine assistant for sports video games called "Tactic Boss AI".
+You are an expert full-stack tactical engine assistant for sports video games called "Tactics Boss AI".
 Analyse the following user request inputs:
 - Game: "${data.game}"
 - User's Current Formation: "${data.myFormation || 'Not provided'}"
