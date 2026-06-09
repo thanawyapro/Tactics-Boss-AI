@@ -24,7 +24,9 @@
     "configure:production": "node scripts/inject-production-config.mjs",
     "build:launch": "npm run configure:production && npm run check && npm run check:launch",
     "check:web-launch": "node scripts/web-launch-readiness.mjs",
-    "build:web-launch": "npm run configure:production && npm run check && npm run check:web-launch"
+    "build:web-launch": "vite build",
+    "build:web": "vite build",
+    "build:netlify": "vite build"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",

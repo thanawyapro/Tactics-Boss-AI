@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "npm run build:web"
   publish = "dist"
 
 [functions]
@@ -12,6 +12,11 @@
 [[redirects]]
   from = "/api/vision-analysis"
   to = "/.netlify/functions/vision-analysis"
+  status = 200
+
+[[redirects]]
+  from = "/api/tactical-coach"
+  to = "/.netlify/functions/tactical-coach"
   status = 200
 
 [[redirects]]
