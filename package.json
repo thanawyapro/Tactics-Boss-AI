@@ -24,7 +24,7 @@
     "configure:production": "node scripts/inject-production-config.mjs",
     "build:launch": "npm run configure:production && npm run check && npm run check:launch",
     "check:web-launch": "node scripts/web-launch-readiness.mjs",
-    "build:web-launch": "npm run build"
+    "build:web-launch": "npm run configure:production && npm run check && npm run check:web-launch"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
